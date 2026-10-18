@@ -193,6 +193,14 @@ ntpdc6  call ntpch
 ntpdc5  ld a,e
         ret
 
+;### NTPPORT -> appends the port, with TLS when the HTTPS box is ticked
+ntpport ld hl,nttxtp80
+        ld a,(ntchk)
+        or a
+        jr z,ntppo1
+        ld hl,nttxtp443
+ntppo1  jp ntpstr
+
 ;### NTPADTO -> pads the current line with spaces up to column A
 ntpadto ld b,a
 ntpad1  ld a,LINEW-1
@@ -616,6 +624,7 @@ btwea   ld hl,nttxtwrk
         call ntlbeg
         ld hl,nttxtswe
         call ntpstr
+        call ntpport
         ld a,LINES-1
         call ntstatline
         call ntredraw
@@ -802,6 +811,7 @@ btsun7  add hl,de
         call ntlbeg
         ld hl,nttxtssu
         call ntpstr
+        call ntpport
         ld a,LINES-1
         call ntstatline
         call ntredraw
@@ -931,11 +941,19 @@ ntnmx   scf
 
 ;### NTHTTP -> HL=host name, sends the request in ntreq, answer goes to rxbuf
 ;### Output CF=0 ok, CF=1 error and HL=error text
-nthttp  call ntdns
+nthttp  push hl                 ;host name
+        ld hl,80                ;plain HTTP, or HTTPS when the box is ticked
+        ld a,(ntchk)
+        or a
+        jr z,nthttp0
+        ld hl,443               ;the daemon makes port 443 a TLS connection
+nthttp0 ld (nthport),hl
+        pop hl
+        call ntdns
         jp c,nthe1
         ld ix,(ntip)
         ld iy,(ntip+2)
-        ld de,80
+        ld de,(nthport)
         ld hl,-1
         xor a
         call SyNet_TCPOPN
@@ -1766,6 +1784,8 @@ ntqp        dw 0
 ntcrec      dw 0
 ntip        ds 4
 nthnd       db 0
+ntchk       db 0            ;state of the HTTPS check box
+nthport     dw 80
 ntsrv       db 0
 ntcnt       dw 0
 ntsl        dw 0
@@ -1831,6 +1851,7 @@ nttxtcity   db "City",0
 nttxtdt     db "Date",0
 nttxthint   db "YYYY MM DD, or empty",0
 nttxtfra    db "Result",0
+nttxthttps  db "HTTPS",0
 nttxtbck    db "World clock",0
 nttxtbwe    db "Weather",0
 nttxtbsn    db "Sun times",0
@@ -1851,8 +1872,10 @@ nttxtip     db "IP:   ",0
 nttxtstr    db "Reply: stratum ",0
 nttxtgoo    db "time.google.com",0
 nttxtclf    db "time.cloudflare.com",0
-nttxtswe    db "Sent: GET wttr.in:80",0
-nttxtssu    db "Sent: GET api.sunrise-sunset.org:80",0
+nttxtswe    db "GET wttr.in",0
+nttxtssu    db "GET api.sunrise-sunset.org",0
+nttxtp80    db ":80",0
+nttxtp443   db ":443 TLS",0
 nttxtwtr    db "Weather now - ",0
 nttxtstit   db "Sun times - ",0
 nttxtdate   db "Date ",0
@@ -2013,13 +2036,14 @@ App_MsgBuf ds 14
 ;### window
 ntwindat    dw #1501,0,40,16,200,150,0,0,200,150,200,150,200,150,prgicnsml,nttxttit,0,0
 ntwindat0   dw ntwingrp,0,0:ds 136+14
-ntwingrp    db 12+LINES,0:dw ntwindata,0,0,4*256+3,0,0,2
+ntwingrp    db 13+LINES,0:dw ntwindata,0,0,4*256+3,0,0,2
 
 ntwindata
 ; onclick         type   property   xpos   ypos   xlen   ylen
 dw      0,  255*256+ 0,         2,     0,     0, 10000, 10000, 0    ;background
 dw      0,  255*256+ 1, ntctxc,       4,     6,    24,     8, 0    ;text city
 dw      0,  255*256+42, ntcctl,      30,     4,   100,    10, 0    ;city dropdown
+dw      0,  255*256+17, ntcchk,     140,     5,    54,     8, 0    ;check box https
 dw  btclk,  255*256+16, nttxtbck,     4,    20,    62,    12, 0    ;button clock
 dw  btwea,  255*256+16, nttxtbwe,    70,    20,    58,    12, 0    ;button weather
 dw  btsun,  255*256+16, nttxtbsn,   132,    20,    62,    12, 0    ;button sun
@@ -2044,6 +2068,7 @@ ntctxc      dw nttxtcity,2+4
 ntctxd      dw nttxtdt,2+4
 ntctxh      dw nttxthint,2+4
 ntcfra      dw nttxtfra,2+4
+ntcchk      dw ntchk,nttxthttps,256*0+2+4
 ntcyr       dw ntbufy,0,0,0,0,4:db 0
 ntcmo       dw ntbufm,0,0,0,0,2:db 0
 ntcdy       dw ntbufd,0,0,0,0,2:db 0
