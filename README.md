@@ -14,6 +14,10 @@ Small test program for the Network Daemon (also works with other daemon drivers)
   was sent to which server, the IP address that was asked and the stratum of the answer. The request goes to
   pool.ntp.org first, then to time.google.com and time.cloudflare.com, each with up to three sends.
   The date of the city is copied into the date fields.
+* HTTPS check box (top right) - Weather and Sun times then connect to port 443 instead of 80. The daemon driver
+  (v0.5 or newer) turns port 443 into a TLS connection in the ESP, the program still sends plain HTTP. The line
+  above the HTTP status shows GET host:port, with TLS added when HTTPS is on. The first HTTPS request needs a few
+  seconds more for the handshake.
 * Weather - HTTP over TCP to wttr.in, one short line (condition, temperature, wind, humidity).
 * Sun times - HTTP over TCP to api.sunrise-sunset.org, sunrise, solar noon, sunset and day length
   in the local time of the city. The three fields are year, month and day (YYYY MM DD), all empty means today.
@@ -34,5 +38,6 @@ like the driver wrapper does. Start the Network Daemon first, then nettest.exe.
 * The World clock button is also the UDP test of the daemon. If it fails, the last characters of the message (for example U03) are the stage letter and the status for diagnosis.
 * The program waits for the network while a request runs, the window does not react until it is finished.
   Time outs are about 25 seconds for TCP and a few seconds per try for SNTP (3 tries).
-* Plain HTTP only. If a service answers with a redirect to https the last line shows it.
+* Plain HTTP unless the HTTPS box is ticked. If a service answers with a redirect to https the last line shows it,
+  tick the box and try again.
 * Summer time uses today's rules (Mexico and Brazil have none any more).
