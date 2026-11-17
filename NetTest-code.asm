@@ -570,6 +570,7 @@ ntsqx   ld (ntdbgv),a
         ret
 ntsq2   ld a,(nthnd)
         ld hl,ntpkt
+        ld bc,64                ;ntpkt is 64 bytes, larger replies are truncated
         call SyNet_UDPRCV
         ret c
         ld a,(ntpkt)
@@ -941,22 +942,42 @@ ntnmx   scf
 
 ;### NTHTTP -> HL=host name, sends the request in ntreq, answer goes to rxbuf
 ;### Output CF=0 ok, CF=1 error and HL=error text
-nthttp  push hl                 ;host name
+nthttp  ld (nthost),hl
         ld hl,80                ;plain HTTP, or HTTPS when the box is ticked
         ld a,(ntchk)
         or a
         jr z,nthttp0
-        ld hl,443               ;the daemon makes port 443 a TLS connection
+        ld hl,443               ;TLS is requested explicitly
 nthttp0 ld (nthport),hl
-        pop hl
+        ld hl,(nthost)
         call ntdns
         jp c,nthe1
         ld ix,(ntip)
         ld iy,(ntip+2)
         ld de,(nthport)
         ld hl,-1
-        xor a
-        call SyNet_TCPOPN
+        ld a,(ntchk)
+        or a
+        jr z,nthttp1
+        ld bc,(nthost)
+        ld a,(App_BnkNum)
+        add a,a
+        add a,a
+        add a,a
+        add a,a
+        or 4
+        push af
+        ld a,(ntvfy)
+        and 1
+        jr z,nthttp3
+        pop af
+        or 12
+        jr nthttp2
+nthttp1 xor a
+        ld bc,0
+        jr nthttp2
+nthttp3 pop af
+nthttp2 call SyNet_TCPOPN
         jp c,nthe2
         ld (nthnd),a
         ld hl,NTTMO
@@ -964,6 +985,8 @@ nthttp0 ld (nthport),hl
 nthw1   ld a,(nthnd)
         call SyNet_TCPSTA
         jp c,nthw9
+        ld a,h
+        ld (ntrsn),a
         ld a,l
         and 127
         cp 2
@@ -1074,7 +1097,13 @@ nthe2   ld hl,nttxtesck
 nthw9   ld c,a
         ld b,"A"
         jr nthe3x
-nthw8   ld c,l
+nthw8   ld a,(ntrsn)
+        or a
+        jr z,nthw8a
+        ld c,a
+        ld b,"R"
+        jr nthe3x
+nthw8a  ld c,l
         ld b,"B"
         jr nthe3x
 nths9   ld c,a
@@ -1690,7 +1719,7 @@ SyNet_UDPSTA
         db FNC_NET_UDPSTA
         jp snwmsgo_afbcdehlixiy
 SyNet_UDPRCV
-        call snwmsgi_afhl
+        call snwmsgi_afbcdehl
         db FNC_NET_UDPRCV
         jp snwmsgo_afhl
 SyNet_UDPSND
@@ -1784,8 +1813,9 @@ ntqp        dw 0
 ntcrec      dw 0
 ntip        ds 4
 nthnd       db 0
-ntchk       db 0            ;state of the HTTPS check box
+ntrsn       db 0
 nthport     dw 80
+nthost      dw 0
 ntsrv       db 0
 ntcnt       dw 0
 ntsl        dw 0
@@ -1852,6 +1882,7 @@ nttxtdt     db "Date",0
 nttxthint   db "YYYY MM DD, or empty",0
 nttxtfra    db "Result",0
 nttxthttps  db "HTTPS",0
+nttxtvfy    db "Verify",0
 nttxtbck    db "World clock",0
 nttxtbwe    db "Weather",0
 nttxtbsn    db "Sun times",0
@@ -2032,11 +2063,13 @@ prgstk  ds 6*2
         dw prgprz
 App_PrcID db 0
 App_MsgBuf ds 14
+ntchk       db 0            ;state of the HTTPS check box (must be in the transfer area)
+ntvfy       db 0            ;state of the Verify check box (must be in the transfer area)
 
 ;### window
 ntwindat    dw #1501,0,40,16,200,150,0,0,200,150,200,150,200,150,prgicnsml,nttxttit,0,0
 ntwindat0   dw ntwingrp,0,0:ds 136+14
-ntwingrp    db 13+LINES,0:dw ntwindata,0,0,4*256+3,0,0,2
+ntwingrp    db 14+LINES,0:dw ntwindata,0,0,4*256+3,0,0,2
 
 ntwindata
 ; onclick         type   property   xpos   ypos   xlen   ylen
@@ -2053,6 +2086,7 @@ dw      0,  255*256+32, ntcmo,       62,    36,    18,    12, 0    ;input month
 dw      0,  255*256+32, ntcdy,       84,    36,    18,    12, 0    ;input day
 dw      0,  255*256+ 1, ntctxh,     108,    38,    88,     8, 0    ;text hint
 dw      0,  255*256+ 3, ntcfra,       0,    52,   200,    96, 0    ;frame
+dw      0,  255*256+17, ntcvfy,     144,    53,    50,     8, 0    ;check box verify
 dw      0,  255*256+ 1, ntlin0,       6,   62,   188,     8, 0
 dw      0,  255*256+ 1, ntlin1,       6,   71,   188,     8, 0
 dw      0,  255*256+ 1, ntlin2,       6,   80,   188,     8, 0
@@ -2069,6 +2103,7 @@ ntctxd      dw nttxtdt,2+4
 ntctxh      dw nttxthint,2+4
 ntcfra      dw nttxtfra,2+4
 ntcchk      dw ntchk,nttxthttps,256*0+2+4
+ntcvfy      dw ntvfy,nttxtvfy,256*0+2+4
 ntcyr       dw ntbufy,0,0,0,0,4:db 0
 ntcmo       dw ntbufm,0,0,0,0,2:db 0
 ntcdy       dw ntbufd,0,0,0,0,2:db 0
